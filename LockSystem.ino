@@ -3,12 +3,12 @@
 #include <ArduinoHttpClient.h>
 #include <Keypad.h>
 #include <MFRC522.h>
+#include <Servo.h>
 
 /////// RFID Settings ///////
 #define SS_PIN 53
 #define RST_PIN 10
 MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
-String registeredCard = "A0 C4 74 A3";
 
 /////// Ethernet Settings ///////
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
@@ -40,9 +40,14 @@ byte rowPins[ROWS] = {29, 28, 27, 26}; //connect to the row pinouts of the keypa
 byte colPins[COLS] = {25, 24, 23, 22}; //connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
-// Status Variables //
-int rStatus = 0;
-int pStatus = 0;
+/////// Servo Settings ///////
+Servo lock; //declares servo
+
+/////// Status Variables & Strings ///////
+int rStatus = 0; // RFID Status
+int pStatus = 0; // PIN Status
+String registeredCard = "160196116163";
+String getReq, tag, rfid, pincode;
 
 void setup() {
   /////// Starting Serial ///////
@@ -70,6 +75,12 @@ void setup() {
   Serial.println("");
   delay(1000);
 
+  Serial.println("Setting up servo motor...");
+  lock.attach(13);
+  Serial.println("Servo Motor Ready.");
+  Serial.println("");
+  delay(1000);
+
   Serial.println("Please tap RFID Card.");
 }
 
@@ -81,6 +92,16 @@ void loop() {
   else if (rStatus == 1)
   {
     keypad.getKey();
+  }
+
+  if (rStatus == 1 && pStatus == 1)
+  {
+    lock.write(5);
+    delay(5000);
+    lock.write(0);
+    rStatus = 0;
+    pStatus = 0;
+
   }
 }
 
@@ -98,21 +119,22 @@ void readRFID()
     return;
   }
   //Show UID on serial monitor
-  Serial.print("UID tag :");
+  Serial.print("RFID UID : ");
   String content = "";
-  byte letter;
   for (byte i = 0; i < mfrc522.uid.size; i++)
   {
-    Serial.print(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " ");
-    Serial.print(mfrc522.uid.uidByte[i], HEX);
-    content.concat(String(mfrc522.uid.uidByte[i] < 0x10 ? " 0" : " "));
-    content.concat(String(mfrc522.uid.uidByte[i], HEX));
+    content.concat(String(mfrc522.uid.uidByte[i]));
   }
-  Serial.println();
-  Serial.print("Message : ");
-  content.toUpperCase();
-  if (content.substring(1) == registeredCard) //change here the UID of the card/cards that you want to give access
+  Serial.println(content);
+  tag = String(content);
+  getTagRequest();
+  Serial.print("DB UID : ");
+  Serial.println(rfid);
+  char rf[12];
+  String newRfid = "";
+  if (tag == rfid) //change here the UID of the card/cards that you want to give access
   {
+    Serial.print("Message : ");
     Serial.println("UID Found.");
     Serial.println();
     delay(3000);
@@ -130,7 +152,7 @@ void readRFID()
 /////// Module Methods - Keypad ///////
 void keypadEvent(KeypadEvent eKey)
 {
-  
+
   switch (keypad.getState())
   {
     case PRESSED:
@@ -160,33 +182,53 @@ void checkPassword()
   pass.concat(key[2]);
   pass.concat(key[3]);
 
-  if (pass == "1234")
+  getPinRequest();
+
+  Serial.print("Input PIN: ");
+  Serial.println(pass);
+  Serial.print("DB PIN: ");
+  Serial.println(pincode);
+
+  if (pass == pincode)
   {
-    Serial.println("PIN Accepted");
+
+
+    Serial.println("Message: PIN Accepted");
+    Serial.println("");
     i = 0;
     pStatus = 1;
     delay(10);
   } else
   {
-    Serial.println(" PIN Denied"); //if passwords wrong keep box locked
+    Serial.println("Message: PIN Denied"); //if passwords wrong keep box locked
     i = 0;
     pStatus = 0;
     delay(10);
   }
 }
 
-void getRequest() {
-  Serial.println("making GET request");
-  client.get("/get.php?tag=160196116163179&pin=");
+void getTagRequest() {
+  //Serial.println("Making GET Request");
+  getReq.concat("/getTag.php?tag=");
+  getReq.concat(tag);
+  client.get(getReq);
+  response = client.responseBody();
+  rfid = response;
+  client.endRequest();
+  delay(1000);
+}
 
-  // read the status code and body of the response
+void getPinRequest() {
+  //Serial.println("Making GET Request");
+  getReq.concat("/getPin.php?tag=");
+  getReq.concat(tag);
+  getReq.concat("&pin=");
+  getReq.concat(pass);
+  client.get(getReq);
   statusCode = client.responseStatusCode();
   response = client.responseBody();
-
-  Serial.print("Status code: ");
+  pincode = response;
   Serial.println(statusCode);
-  Serial.print("Response: ");
-  Serial.println(response);
-  Serial.println("Wait five seconds");
-  delay(5000);
+  client.endRequest();
+  delay(1000);
 }
