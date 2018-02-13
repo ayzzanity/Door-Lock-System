@@ -19,7 +19,6 @@ int port = 80;
 /////// HttpClient Settings ///////
 EthernetClient ethr;
 HttpClient client = HttpClient(ethr, serverAddress, port);
-String response;
 int statusCode = 0;
 
 /////// Keypad Settings ///////
@@ -46,7 +45,6 @@ Servo lock; //declares servo
 /////// Status Variables & Strings ///////
 int rStatus = 0; // RFID Status
 int pStatus = 0; // PIN Status
-String registeredCard = "160196116163";
 String getReq, tag, rfid, pincode;
 
 void setup() {
@@ -75,12 +73,14 @@ void setup() {
   Serial.println("");
   delay(1000);
 
+  /////// Servo Setup ///////
   Serial.println("Setting up servo motor...");
   lock.attach(13);
   Serial.println("Servo Motor Ready.");
   Serial.println("");
   delay(1000);
 
+  /////// R E A D Y ///////
   Serial.println("Please tap RFID Card.");
 }
 
@@ -96,12 +96,14 @@ void loop() {
 
   if (rStatus == 1 && pStatus == 1)
   {
+    Serial.println("Door Unlocked.");
     lock.write(5);
     delay(5000);
     lock.write(0);
     rStatus = 0;
     pStatus = 0;
-
+    delay(1000);
+    loop();
   }
 }
 
@@ -130,8 +132,7 @@ void readRFID()
   getTagRequest();
   Serial.print("DB UID : ");
   Serial.println(rfid);
-  char rf[12];
-  String newRfid = "";
+
   if (tag == rfid) //change here the UID of the card/cards that you want to give access
   {
     Serial.print("Message : ");
@@ -182,6 +183,7 @@ void checkPassword()
   pass.concat(key[2]);
   pass.concat(key[3]);
 
+  delay(1000);
   getPinRequest();
 
   Serial.print("Input PIN: ");
@@ -207,28 +209,29 @@ void checkPassword()
   }
 }
 
+/////// Database Transactions via PHP ///////
 void getTagRequest() {
-  //Serial.println("Making GET Request");
+  //Making GET Request
+  getReq = "";
   getReq.concat("/getTag.php?tag=");
   getReq.concat(tag);
   client.get(getReq);
-  response = client.responseBody();
-  rfid = response;
-  client.endRequest();
+  rfid = client.responseBody();
+
+  client.stop();
   delay(1000);
 }
 
 void getPinRequest() {
-  //Serial.println("Making GET Request");
+  //Making GET Request
+  getReq = "";
   getReq.concat("/getPin.php?tag=");
   getReq.concat(tag);
   getReq.concat("&pin=");
   getReq.concat(pass);
   client.get(getReq);
-  statusCode = client.responseStatusCode();
-  response = client.responseBody();
-  pincode = response;
-  Serial.println(statusCode);
-  client.endRequest();
+  pincode = client.responseBody();
+
+  client.stop();
   delay(1000);
 }
